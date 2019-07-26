@@ -1,7 +1,8 @@
 const fs = require('fs')
 const path = require('path')
-const fileWalker = require('./lib/file_walker')
-const renderEngine = require('./lib/render_engine')
+const syncLock = require('./lib/syncLock')
+const fileWalker = require('./lib/fileWalker')
+const renderEngine = require('./lib/renderEngine')
 
 const noop = ()=> {}
 
@@ -13,6 +14,7 @@ const STATE = {
   WALKER: 'WALKER', // 文件夹遍历
   RENDER: 'RENDER', // 渲染html
   SUCCESS: 'SUCCESS', // 渲染成功
+  PENDING: 'PENDING', // 挂起状态，等待输入调度
 }
 const PATH_TYPE = {
   ABSOLUTE: 'ABSOLUTE', // 绝对路径
@@ -22,7 +24,7 @@ const PATH_TYPE = {
 class Reader {
 
   constructor() {
-    this.state = STATE.READY
+    this.state = STATE.PENDING
     this.abPath = ''
     this.files = []
     this.name = ''
@@ -47,8 +49,13 @@ class Reader {
   // 目录树渲染成dom树
   render() {
     const html = renderEngine(this.files)
-    const name = this.abPath.split('/').pop()+ '_' + Date.now() + '.html'
-    fs.writeFileSync(path.resolve(__dirname, './report', name) ,html)
+    const base = path.resolve(__dirname, './report')
+    if (!fs.existsSync(base)) {
+      fs.mkdirSync(base)
+    }
+    this.name = this.abPath.split('/').pop() + '_' + Date.now() + '.html'
+    fs.writeFileSync(path.resolve(base, this.name), html)
+    return {state: STATE.SUCCESS}
   }
 
   // 查询找文件
@@ -70,6 +77,12 @@ class Reader {
     return {...params, state: STATE.WALKER}
   }
 
+  // 挂起阶段，等待输入路径执行
+  pending() {
+    syncLock.unlock()
+    return false
+  }
+
   // 遍历文件，生成目录树
   async walker() {
     try {
@@ -81,17 +94,19 @@ class Reader {
     }
   }
 
-  // 操作执行成功，退出
+  // 操作执行成功，解除锁，继续接受输入
   success() {
-    console.log('执行成功!')
-    process.exit()
+    console.log(`执行成功: 生成${this.name}`)
+    console.log('请继续输入文件路径: ')
+    return {state: STATE.PENDING}
   }
 
-  // 错误处理
+  // 错误处理，退出程序
   error(e) {
     const {message} = e
     console.error(message)
-    process.exit()
+    console.log('请重新输入文件路径: ')
+    return { state: STATE.PENDING }
   }
 
   // 状态调度器
@@ -101,8 +116,8 @@ class Reader {
     if(!fn || typeof(fn) !== 'function') {
       throw {message: `${state}: 不存在状态处理函数!`}
     }
-    console.log(`执行 ${state}阶段...`)
     const result = await fn(params)
+    if(result === false) return
     const {state: _state, ...others} = result
     this.state = _state
     return await this.schedule(others)
@@ -115,6 +130,7 @@ class Reader {
     await this.schedule(inputPath)
     }catch(e) {
       this.error(e)
+      syncLock.unlock()
     }
   }
 
