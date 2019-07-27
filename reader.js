@@ -48,13 +48,14 @@ class Reader {
 
   // 目录树渲染成dom树
   render() {
-    const html = renderEngine(this.files)
+    const {html, style} = renderEngine(this.files)
     const base = path.resolve(__dirname, './report')
     if (!fs.existsSync(base)) {
       fs.mkdirSync(base)
     }
-    this.name = this.abPath.split('/').pop() + '_' + Date.now() + '.html'
-    fs.writeFileSync(path.resolve(base, this.name), html)
+    this.name = this.abPath.split('/').pop() + '_' + Date.now()
+    fs.writeFileSync(path.resolve(base, this.name + '.html'), html.replace('{__style}', `<link rel="stylesheet" type="text/css" href="./${this.name}.css">`))
+    fs.writeFileSync(path.resolve(base, this.name + '.css'), style)
     return {state: STATE.SUCCESS}
   }
 
