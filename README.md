@@ -10,4 +10,5 @@ node index.js
 ```
 ### 查看
 cd report
-open directory-visual_1597244241402
+
+open directory-visual_1597244241402.html
