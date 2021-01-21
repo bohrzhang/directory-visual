@@ -1,5 +1,5 @@
 # directory-visual
-目录结构可视化一键生成
+目录结构图谱一键生成
 
 ### 使用
 ```javascript
